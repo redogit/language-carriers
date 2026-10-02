@@ -1,0 +1,35 @@
+{
+  "schema": "other-projects/bidirectional-handoff-adapter/v1",
+  "date": "2026-09-20",
+  "local_authority": "redogit/Other-Projects-",
+  "central_protocol": "redogit/redogit:BIDIRECTIONAL_HANDOFF_PROTOCOL_2026-09-20.json",
+  "inbound": {
+    "status": "RMAL_HANDOFF_AND_TARGET_ACCEPTANCE_SYNTAX_IMPLEMENTED",
+    "carrier": "docs/RMAL_COOPERATIVE_IMPLEMENTATION_PROTOCOL.rmal",
+    "evidence": "evidence/RMAL_COOPERATIVE_IMPLEMENTATION_PROTOCOL_2026-09-19.json",
+    "evidence_anchor": "f93f056a33d5fad0f29b763a0d49c6b79eb18d49"
+  },
+  "outbound": {
+    "status": "RMAL_STRUCTURED_RESPONSE_CARRIER_CONTROLLED_SURFACE_VERIFIED",
+    "carrier": "docs/RMAL_BIDIRECTIONAL_HANDOFF_RESPONSE.rmal",
+    "documentation": "docs/RMAL_BIDIRECTIONAL_HANDOFF_RESPONSE.md",
+    "evidence": "evidence/RMAL_BIDIRECTIONAL_HANDOFF_RESPONSE_2026-09-20.json",
+    "controlled_surface_check": "PASS",
+    "carrier_merge_anchor": "8f2d4e433d4b1bff3ec6eb0cc6a054b4c5bce284",
+    "validation_run_id": 35505020623,
+    "validated_head_sha": "cb3d9ef7523caa22a49bfddbaf7caf3dd776af92",
+    "rmalc_revalidated": false,
+    "structured_response_packet_runtime": false,
+    "generic_response_packet_runtime": false,
+    "note": "Exact-head controlled-surface check passed in run 35505020623. This verifies the declared structural subset only; fresh RMALC check/compile/audit and runtime transport remain unestablished."
+  },
+  "boundaries": [
+    "RELATED != AUTHORIZED_TO_EDIT",
+    "READ != WRITE",
+    "PROPOSED != ACCEPTED",
+    "ACCEPTED != VERIFIED",
+    "SHARED_METHOD != SHARED_EVIDENCE",
+    "COMPILED != SCIENTIFICALLY_VALID"
+  ],
+  "claim_ceiling": "OTHER_PROJECTS_AUTHORED_RESPONSE_CARRIER_CONTROLLED_SURFACE_ONLY_NO_FRESH_RMALC_OR_RUNTIME"
+}

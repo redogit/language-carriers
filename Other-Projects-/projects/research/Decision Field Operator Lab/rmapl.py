@@ -1,0 +1,376 @@
+"""Parser and immutable IR for the bounded RMAPL v0 profile.
+
+RMAPL v0 is intentionally small and declarative.  It is not RMALC syntax and
+this module makes no claim that RMALC accepts RMAPL programs.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+import json
+import math
+import re
+from types import MappingProxyType
+from typing import Any, Mapping
+
+RMAPL_VERSION = "RMAPL 0"
+_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_.:-]*$")
+
+
+@dataclass(frozen=True)
+class RepairSpec:
+    repair_id: str
+    trigger: str
+    requires: tuple[str, ...]
+    targets: tuple[str, ...]
+    preserves: tuple[str, ...]
+    may_mutate: tuple[str, ...]
+    forbids: tuple[str, ...]
+    operator: str
+    evidence: tuple[str, ...]
+    cost: float
+
+
+@dataclass(frozen=True)
+class FitterSpec:
+    fitter_id: str
+    trigger: str
+    requires: tuple[str, ...]
+    preserves: tuple[str, ...]
+    objectives: Mapping[str, str]
+    operator: str
+    evidence: tuple[str, ...]
+    cost: float
+
+
+@dataclass(frozen=True)
+class OperatorSpec:
+    operator_id: str
+    max_instructions: int
+    max_buffer_bytes: int
+    metrics: Mapping[str, Any]
+    knowledge_decay: Mapping[str, Any]
+    reconstruction: str
+    instructions: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class Program:
+    version: str
+    program_id: str
+    load_ref: str
+    bounds: Mapping[str, Any]
+    repairs: tuple[RepairSpec, ...]
+    fitters: tuple[FitterSpec, ...]
+    operators: tuple[OperatorSpec, ...] = ()
+
+
+def _identifier(value: str, label: str) -> str:
+    if not _IDENT_RE.fullmatch(value):
+        raise ValueError(f"invalid {label} identifier: {value!r}")
+    return value
+
+
+def _strict_json(text: str, label: str) -> Any:
+    def reject_constant(value: str) -> None:
+        raise ValueError(f"{label} must be finite JSON, got {value}")
+
+    def finite_float(value: str) -> float:
+        number = float(value)
+        if not math.isfinite(number):
+            raise ValueError(f"{label} must be finite JSON, got {value}")
+        return number
+
+    def unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError(f"{label} contains duplicate JSON key {key!r}")
+            result[key] = value
+        return result
+
+    try:
+        return json.loads(
+            text,
+            parse_constant=reject_constant,
+            parse_float=finite_float,
+            object_pairs_hook=unique_object,
+        )
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise ValueError(f"{label} must be valid JSON: {exc}") from exc
+
+
+def _freeze_json(value: Any) -> Any:
+    """Freeze parsed JSON containers without adding recursive call depth."""
+    if not isinstance(value, (dict, list)):
+        return value
+
+    frozen: dict[int, Any] = {}
+    pending = [(value, False)]
+
+    def frozen_child(item: Any) -> Any:
+        return frozen[id(item)] if isinstance(item, (dict, list)) else item
+
+    # Post-order traversal keeps nested JSON within the decoder's depth limit.
+    while pending:
+        current, expanded = pending.pop()
+        if not expanded:
+            pending.append((current, True))
+            children = current.values() if isinstance(current, dict) else current
+            pending.extend(
+                (item, False) for item in children if isinstance(item, (dict, list))
+            )
+        elif isinstance(current, dict):
+            frozen[id(current)] = MappingProxyType(
+                {key: frozen_child(item) for key, item in current.items()}
+            )
+        else:
+            frozen[id(current)] = tuple(frozen_child(item) for item in current)
+
+    return frozen[id(value)]
+
+
+def _json_string(text: str, label: str) -> str:
+    value = _strict_json(text, label)
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{label} must be a non-empty JSON string")
+    return value
+
+
+def _string_array(text: str, label: str) -> tuple[str, ...]:
+    value = _strict_json(text, label)
+    if not isinstance(value, list) or any(not isinstance(item, str) or not item for item in value):
+        raise ValueError(f"{label} must be a JSON array of non-empty strings")
+    return tuple(value)
+
+
+def _cost(text: str) -> float:
+    value = _strict_json(text, "COST")
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError("COST must be a non-negative finite JSON number")
+    try:
+        number = float(value)
+    except OverflowError as exc:
+        raise ValueError("COST must be a non-negative finite JSON number") from exc
+    if not math.isfinite(number) or number < 0:
+        raise ValueError("COST must be a non-negative finite JSON number")
+    return number
+
+
+def _clean_lines(program: str) -> list[str]:
+    if not isinstance(program, str):
+        raise TypeError("RMAPL program must be text")
+    lines = []
+    # Unicode separators inside JSON strings are data, not instruction breaks.
+    for raw in re.split(r"\r\n|\r|\n", program):
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        lines.append(line)
+    return lines
+
+
+def _after_prefix(line: str, prefix: str, label: str) -> str:
+    if not line.startswith(prefix):
+        raise ValueError(f"expected {label}, got {line!r}")
+    value = line[len(prefix):].strip()
+    if not value:
+        raise ValueError(f"{label} requires a value")
+    return value
+
+
+def parse_rmapl(program: str) -> Program:
+    lines = _clean_lines(program)
+    if not lines or lines[0] != RMAPL_VERSION:
+        raise ValueError(f"program must start with {RMAPL_VERSION!r}")
+    if len(lines) < 4:
+        raise ValueError("incomplete RMAPL program")
+
+    program_id = _identifier(_after_prefix(lines[1], "PROGRAM ", "PROGRAM"), "PROGRAM")
+    load_ref = _identifier(_after_prefix(lines[2], "LOAD ", "LOAD"), "LOAD")
+    index = 3
+
+    bounds: dict[str, Any] = {}
+    while index < len(lines) and lines[index].startswith("BOUND "):
+        assignment = _after_prefix(lines[index], "BOUND ", "BOUND")
+        if "=" not in assignment:
+            raise ValueError("BOUND requires identifier=JSON")
+        key, raw = assignment.split("=", 1)
+        key = _identifier(key.strip(), "BOUND")
+        if key in bounds:
+            raise ValueError(f"duplicate BOUND {key!r}")
+        bounds[key] = _strict_json(raw.strip(), f"BOUND {key}")
+        index += 1
+
+    repairs: list[RepairSpec] = []
+    fitters: list[FitterSpec] = []
+    operators: list[OperatorSpec] = []
+    block_ids: set[str] = set()
+    operator_ids: set[str] = set()
+
+    def next_line(expected_prefix: str, label: str) -> str:
+        nonlocal index
+        if index >= len(lines):
+            raise ValueError(f"expected {label}, got end of program")
+        value = _after_prefix(lines[index], expected_prefix, label)
+        index += 1
+        return value
+
+    while index < len(lines):
+        line = lines[index]
+        if line == "RUN":
+            if index != len(lines) - 1:
+                raise ValueError("RUN must be terminal")
+            return Program(
+                version=RMAPL_VERSION,
+                program_id=program_id,
+                load_ref=load_ref,
+                bounds=_freeze_json(bounds),
+                repairs=tuple(repairs),
+                fitters=tuple(fitters),
+                operators=tuple(operators),
+            )
+
+        if line.startswith("OPERATOR "):
+            operator_id = _identifier(_after_prefix(line, "OPERATOR ", "OPERATOR"), "OPERATOR")
+            if operator_id in operator_ids:
+                raise ValueError(f"duplicate OPERATOR {operator_id!r}")
+            operator_ids.add(operator_id)
+            index += 1
+
+            raw_limit = _strict_json(next_line("LIMIT ", "LIMIT"), "LIMIT")
+            if isinstance(raw_limit, bool) or not isinstance(raw_limit, int) or not (1 <= raw_limit <= 1_000_000):
+                raise ValueError("LIMIT must be an integer in [1, 1000000]")
+
+            raw_buffer_limit = _strict_json(
+                next_line("BUFFER_LIMIT ", "BUFFER_LIMIT"),
+                "BUFFER_LIMIT",
+            )
+            if (
+                isinstance(raw_buffer_limit, bool)
+                or not isinstance(raw_buffer_limit, int)
+                or not (0 <= raw_buffer_limit <= 268_435_456)
+            ):
+                raise ValueError("BUFFER_LIMIT must be an integer in [0, 268435456]")
+
+            metrics_raw = _strict_json(next_line("METRICS ", "METRICS"), "METRICS")
+            if not isinstance(metrics_raw, dict):
+                raise ValueError("METRICS must be a JSON object")
+
+            decay_raw = _strict_json(
+                next_line("KNOWLEDGE_DECAY ", "KNOWLEDGE_DECAY"),
+                "KNOWLEDGE_DECAY",
+            )
+            if not isinstance(decay_raw, dict):
+                raise ValueError("KNOWLEDGE_DECAY must be a JSON object")
+
+            reconstruction = _json_string(
+                next_line("RECONSTRUCTION ", "RECONSTRUCTION"),
+                "RECONSTRUCTION",
+            )
+            if index >= len(lines) or lines[index] != "CODE":
+                got = "end of program" if index >= len(lines) else repr(lines[index])
+                raise ValueError(f"expected CODE, got {got}")
+            index += 1
+
+            instructions: list[str] = []
+            while index < len(lines) and lines[index] != "END":
+                if lines[index] == "RUN":
+                    raise ValueError("OPERATOR must terminate with END before RUN")
+                instructions.append(lines[index])
+                index += 1
+            if index >= len(lines):
+                raise ValueError("expected END, got end of program")
+            if not instructions:
+                raise ValueError("OPERATOR CODE must contain at least one instruction")
+            if len(instructions) > raw_limit:
+                raise ValueError(
+                    f"OPERATOR static instruction count {len(instructions)} exceeds LIMIT {raw_limit}"
+                )
+            index += 1
+            operators.append(
+                OperatorSpec(
+                    operator_id=operator_id,
+                    max_instructions=raw_limit,
+                    max_buffer_bytes=raw_buffer_limit,
+                    metrics=_freeze_json(metrics_raw),
+                    knowledge_decay=_freeze_json(decay_raw),
+                    reconstruction=reconstruction,
+                    instructions=tuple(instructions),
+                )
+            )
+            continue
+
+        if line.startswith("REPAIR "):
+            repair_id = _identifier(_after_prefix(line, "REPAIR ", "REPAIR"), "REPAIR")
+            if repair_id in block_ids:
+                raise ValueError(f"duplicate block id {repair_id!r}")
+            block_ids.add(repair_id)
+            index += 1
+            trigger = _json_string(next_line("WHEN ", "WHEN"), "WHEN")
+            requires = _string_array(next_line("REQUIRES ", "REQUIRES"), "REQUIRES")
+            targets = _string_array(next_line("TARGETS ", "TARGETS"), "TARGETS")
+            preserves = _string_array(next_line("PRESERVES ", "PRESERVES"), "PRESERVES")
+            may_mutate = _string_array(next_line("MAY_MUTATE ", "MAY_MUTATE"), "MAY_MUTATE")
+            forbids = _string_array(next_line("FORBIDS ", "FORBIDS"), "FORBIDS")
+            operator = _identifier(next_line("APPLY ", "APPLY"), "APPLY")
+            evidence = _string_array(next_line("EVIDENCE ", "EVIDENCE"), "EVIDENCE")
+            cost = _cost(next_line("COST ", "COST"))
+            if index >= len(lines) or lines[index] != "END":
+                got = "end of program" if index >= len(lines) else repr(lines[index])
+                raise ValueError(f"expected END, got {got}")
+            index += 1
+            repairs.append(
+                RepairSpec(
+                    repair_id=repair_id,
+                    trigger=trigger,
+                    requires=requires,
+                    targets=targets,
+                    preserves=preserves,
+                    may_mutate=may_mutate,
+                    forbids=forbids,
+                    operator=operator,
+                    evidence=evidence,
+                    cost=cost,
+                )
+            )
+            continue
+
+        if line.startswith("FITTER "):
+            fitter_id = _identifier(_after_prefix(line, "FITTER ", "FITTER"), "FITTER")
+            if fitter_id in block_ids:
+                raise ValueError(f"duplicate block id {fitter_id!r}")
+            block_ids.add(fitter_id)
+            index += 1
+            trigger = _json_string(next_line("WHEN ", "WHEN"), "WHEN")
+            requires = _string_array(next_line("REQUIRES ", "REQUIRES"), "REQUIRES")
+            preserves = _string_array(next_line("PRESERVES ", "PRESERVES"), "PRESERVES")
+            objectives_raw = _strict_json(next_line("OBJECTIVES ", "OBJECTIVES"), "OBJECTIVES")
+            if not isinstance(objectives_raw, dict) or any(
+                not isinstance(key, str) or not isinstance(value, str) or value not in {"max", "min"}
+                for key, value in objectives_raw.items()
+            ):
+                raise ValueError("OBJECTIVES must be a JSON object mapping names to 'max' or 'min'")
+            operator = _identifier(next_line("APPLY ", "APPLY"), "APPLY")
+            evidence = _string_array(next_line("EVIDENCE ", "EVIDENCE"), "EVIDENCE")
+            cost = _cost(next_line("COST ", "COST"))
+            if index >= len(lines) or lines[index] != "END":
+                got = "end of program" if index >= len(lines) else repr(lines[index])
+                raise ValueError(f"expected END, got {got}")
+            index += 1
+            fitters.append(
+                FitterSpec(
+                    fitter_id=fitter_id,
+                    trigger=trigger,
+                    requires=requires,
+                    preserves=preserves,
+                    objectives=MappingProxyType(dict(sorted(objectives_raw.items()))),
+                    operator=operator,
+                    evidence=evidence,
+                    cost=cost,
+                )
+            )
+            continue
+
+        raise ValueError(f"unknown top-level operation: {line!r}")
+
+    raise ValueError("program must terminate with RUN")

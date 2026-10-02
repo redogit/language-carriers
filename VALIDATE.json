@@ -1,0 +1,150 @@
+{
+  "schema": "standalone-export-validation/v1",
+  "checks": [
+    {
+      "name": "operator",
+      "cwd": "Other-Projects-",
+      "command": [
+        "python",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "projects/research/Decision Field Operator Lab",
+        "-p",
+        "test_*.py"
+      ],
+      "environment": {},
+      "timeout_seconds": 300
+    },
+    {
+      "name": "gsfl",
+      "cwd": "Other-Projects-",
+      "command": [
+        "python",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "projects/languages/Generalized Semantic Fitting Language",
+        "-p",
+        "test_*.py"
+      ],
+      "environment": {},
+      "timeout_seconds": 300
+    },
+    {
+      "name": "blank-page",
+      "cwd": "Other-Projects-",
+      "command": [
+        "python",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "projects/research/Blank Page Lab",
+        "-p",
+        "test_*.py"
+      ],
+      "environment": {},
+      "timeout_seconds": 300
+    },
+    {
+      "name": "compression",
+      "cwd": "Other-Projects-",
+      "command": [
+        "python",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "projects/research/S1024 Compression Lab/tests",
+        "-p",
+        "test_*.py"
+      ],
+      "environment": {},
+      "timeout_seconds": 300
+    },
+    {
+      "name": "sprime-compact",
+      "cwd": "Other-Projects-",
+      "command": [
+        "python",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "projects/research/SPrime Search/compact",
+        "-p",
+        "test_*.py"
+      ],
+      "environment": {},
+      "timeout_seconds": 300
+    },
+    {
+      "name": "sprime-bom",
+      "cwd": "Other-Projects-",
+      "command": [
+        "python",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "projects/research/SPrime Search/decision-field/bom/tests",
+        "-p",
+        "test_*.py"
+      ],
+      "environment": {},
+      "timeout_seconds": 300
+    },
+    {
+      "name": "sprime-fast",
+      "cwd": "Other-Projects-",
+      "command": [
+        "python",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "projects/research/SPrime Search/decision-field/bom/fast/tests",
+        "-p",
+        "test_*.py"
+      ],
+      "environment": {},
+      "timeout_seconds": 300
+    },
+    {
+      "name": "s1-models",
+      "cwd": "Other-Projects-",
+      "command": [
+        "node",
+        "--test",
+        "projects/research/S1 Models Lab/tests/audit.test.mjs",
+        "projects/research/S1 Models Lab/tests/carrier-v1.test.mjs",
+        "projects/research/S1 Models Lab/tests/core.test.mjs",
+        "projects/research/S1 Models Lab/tests/dimension-ladder.test.mjs",
+        "projects/research/S1 Models Lab/tests/evidence.test.mjs",
+        "projects/research/S1 Models Lab/tests/experience.test.mjs",
+        "projects/research/S1 Models Lab/tests/geometry.test.mjs",
+        "projects/research/S1 Models Lab/tests/image-surface.test.mjs",
+        "projects/research/S1 Models Lab/tests/integrity.test.mjs",
+        "projects/research/S1 Models Lab/tests/observer-extensions.test.mjs",
+        "projects/research/S1 Models Lab/tests/observer-field.test.mjs",
+        "projects/research/S1 Models Lab/tests/observer.test.mjs",
+        "projects/research/S1 Models Lab/tests/possibility-sweep.test.mjs",
+        "projects/research/S1 Models Lab/tests/rigor-evidence.test.mjs",
+        "projects/research/S1 Models Lab/tests/rigor.test.mjs",
+        "projects/research/S1 Models Lab/tests/storage.test.mjs",
+        "projects/research/S1 Models Lab/tests/suggest.test.mjs",
+        "projects/research/S1 Models Lab/tests/ui-contract.test.mjs"
+      ],
+      "environment": {},
+      "timeout_seconds": 300
+    }
+  ],
+  "not_exercised": [
+    "Chrome/Chromium browser checks (browser absent in preparation environment).",
+    "Windows SDK, Android and full LLVM/MLIR native builds.",
+    "Excluded projection verifier and privacy/lineage documents/tests remain withheld."
+  ]
+}

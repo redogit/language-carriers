@@ -1,0 +1,75 @@
+name: projects/research/Decision Field Operator Lab
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'projects/research/Decision Field Operator Lab/**'
+      - '.github/workflows/operator-field-check.yml'
+      - 'BIDIRECTIONAL_HANDOFF_ADAPTER_2026-09-20.json'
+      - 'evidence/RMAL_BIDIRECTIONAL_HANDOFF_RESPONSE_2026-09-20.json'
+      - 'projects/research/Hodge Span Lab/evidence/issue43_bridge_calibration_result.json'
+      - 'projects/languages/Generalized Semantic Fitting Language/evidence/RESULTS.json'
+  pull_request:
+    paths:
+      - 'projects/research/Decision Field Operator Lab/**'
+      - '.github/workflows/operator-field-check.yml'
+      - 'BIDIRECTIONAL_HANDOFF_ADAPTER_2026-09-20.json'
+      - 'evidence/RMAL_BIDIRECTIONAL_HANDOFF_RESPONSE_2026-09-20.json'
+      - 'projects/research/Hodge Span Lab/evidence/issue43_bridge_calibration_result.json'
+      - 'projects/languages/Generalized Semantic Fitting Language/evidence/RESULTS.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  VERIFY_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
+concurrency:
+  group: operator-field-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fetch exact verification commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$VERIFY_SHA"
+          git init "$GITHUB_WORKSPACE"
+          cd "$GITHUB_WORKSPACE"
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --depth=1 origin "$VERIFY_SHA"
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "$VERIFY_SHA"
+
+      - name: Run exact bounded tests
+        run: python3 -m unittest discover -s "projects/research/Decision Field Operator Lab" -p "test_*.py" -v
+
+      - name: Verify committed operator-field evidence is reproducible
+        run: python3 "projects/research/Decision Field Operator Lab/run_audit.py" --check
+
+      - name: Verify GSFL operator projection evidence is reproducible
+        run: python3 "projects/research/Decision Field Operator Lab/run_gsfl_operator_audit.py" --check
+
+      - name: Verify GSFL bidirectional macro evidence is reproducible
+        run: python3 "projects/research/Decision Field Operator Lab/run_gsfl_bidirectional_audit.py" --check
+
+      - name: Verify contextual multicarrier reasoning evidence is reproducible
+        run: python3 "projects/research/Decision Field Operator Lab/run_contextual_multicarrier_audit.py" --check
+
+      - name: Verify S1 Carrier-Surface bridge evidence is reproducible
+        run: python3 "projects/research/Decision Field Operator Lab/run_s1_carrier_surface_audit.py" --check
+
+      - name: Verify RMAPL Omega conditional repair evidence is reproducible
+        run: python3 "projects/research/Decision Field Operator Lab/run_rmapl_omega_audit.py" --check
+
+      - name: Run RMAPL Omega adversarial stress at scale 4
+        run: python3 "projects/research/Decision Field Operator Lab/run_rmapl_omega_stress.py" --scale 4 --out /tmp/rmapl-omega-stress-scale4.json
+
+      - name: Verify frozen RMAPL Omega stress evidence is reproducible
+        run: python3 "projects/research/Decision Field Operator Lab/run_rmapl_omega_stress.py" --check
