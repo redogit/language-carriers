@@ -1,5 +1,7 @@
 # Language and carriers
 
+> **Public page:** https://redogit.github.io/language-carriers/ · **Main / About:** https://redogit.github.io/redogit/
+
 GSFL, SPrime, compression, Cross-Carrier, operator methods, and related labs.
 
 This standalone export preserves original source paths and bytes. Necessary cross-project dependencies are copied with explicit provenance; ownership and historical evidence remain with their source projects.
